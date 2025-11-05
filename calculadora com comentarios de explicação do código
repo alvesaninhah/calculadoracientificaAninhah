@@ -1,0 +1,416 @@
+// Calculadora feita por: Ana Karla, Brunno, Flávio e Ramon.
+#include <stdio.h>   // Biblioteca usada para tudo relacionado à entrada e saída. Serve para funções como printf (exibir algo na tela), scanf (ler dados do usuário), fgets (ler uma linha de texto), etc.
+#include <stdlib.h>  // Biblioteca útil para manipulação de memória, como alocar e liberar espaço (com malloc e free), além de funções para conversão de tipos, geração de números aleatórios e controle de processos.
+#include <string.h>  // Biblioteca usada para manipular strings. Com ela dá para fazer funções como copiar strings, comparar, medir o tamanho delas e até juntar algumas.
+#include <math.h>    // Essa é a biblioteca para tudo relacionado a cálculos matemáticos. Funções como calcular seno, cosseno, potência, raiz quadrada, logaritmos e outras operações numéricas.
+#include <errno.h>   // Biblioteca para lidar com erros no código. Ela define códigos de erro (como quando dá erro na alocação de memória) e permite que a gente consiga tratar esses erros de forma mais clara.
+#include <limits.h> /* Para limites inteiros */
+
+#ifndef M_PI   // Verifica se a constante M_PI (valor de pi) não está definida ainda
+#define M_PI 3.14159265358979323846   // Define o valor de pi, caso ainda não tenha sido definido
+#endif   // Finaliza a verificação e definição do valor de pi
+
+
+/* ---------- Configurações ---------- */
+#define MAX_TIPO 20     // Define o limite de 20 caracteres para o tipo de operação (ex: soma, subtração)
+#define HIST_SIZE 100   // Estabelece que o histórico de operações pode armazenar até 100 registros
+#define LINE_LEN 256    // Define o máximo de 256 caracteres para uma linha de entrada do usuário
+#define FACT_LIMIT 20   // Define o limite seguro de 20 para o cálculo de fatoriais (evita overflow)
+#define EPSILON 1e-9    // Define a tolerância para comparações de números em ponto flutuante, usado para evitar problemas de precisão
+
+
+/* ---------- Estruturas de Dados para o Histórico ---------- */
+typedef struct {  // Inicia a definição de uma nova estrutura de dados (struct), que permite agrupar diferentes tipos de variáveis sob um mesmo nome
+    char tipo[MAX_TIPO];  // Armazena o tipo da operação (como soma, subtração, etc.) com até 20 caracteres
+    double a;             // Armazena o primeiro número (operando) da operação
+    double b;             // Armazena o segundo número (operando) da operação
+    double resultado;     // Armazena o resultado da operação realizada
+    int id;               // Armazena um identificador único para cada operação, usado para controle no histórico
+} Operacao;  // Define o tipo Operacao, que é uma estrutura contendo os dados de uma operação
+
+
+typedef struct {
+    Operacao ops[HIST_SIZE]; // Armazena as operações feitas, com o tamanho definido pela constante HIST_SIZE
+    int start;               // Índice que marca o início do histórico, utilizado para gerenciar o fluxo de operações
+    int count;               // Contador de quantas operações estão no histórico
+    int next_id;             // ID da próxima operação a ser registrada, garantindo um identificador único para cada uma
+} Historico;  // Define a estrutura 'Historico', que guarda o histórico de operações e informações para controle
+
+
+/* ---------- Funções de Entrada e Utilitários ---------- */
+
+int read_line(char *buf, size_t sz);           // Lê uma linha de texto e armazena no buffer 'buf' com o tamanho máximo 'sz'
+int read_int(const char *prompt, int *out);    // Lê um número inteiro a partir de um prompt, e armazena o valor na variável 'out'
+int read_double(const char *prompt, double *out);  // Lê um número decimal a partir de um prompt, e armazena o valor na variável 'out'
+static void clear_input_rest(void);            // Limpa o que sobrou de entrada no buffer (caso o usuário tenha dado mais input do que o esperado)
+
+/* ---------- Funções de Cálculos ---------- */
+
+double calc_add(double a, double b);  // Realiza a soma entre 'a' e 'b' e retorna o resultado
+double calc_sub(double a, double b);  // Realiza a subtração entre 'a' e 'b' e retorna o resultado
+double calc_mul(double a, double b);  // Realiza a multiplicação entre 'a' e 'b' e retorna o resultado
+int calc_div(double a, double b, double *res);  // Realiza a divisão entre 'a' e 'b'. Retorna 0 em caso de sucesso e -1 se houver divisão por zero. O resultado é armazenado em 'res'
+
+/*--------Funções avançadas--------*/
+
+double calc_pow_d(double base, double exp);  // Calcula a potência de 'base' elevado a 'exp' e retorna o resultado
+int calc_root(double value, double n, double *res);  // Calcula a raiz enésima de 'value'. Se 'n' for válido, retorna o resultado em 'res'
+int calc_log_base(double v, double base, double *res);  // Calcula o logaritmo de 'v' na base 'base' e retorna o resultado em 'res'
+unsigned long long calc_factorial_int(int n, int *err);  // Calcula o fatorial de 'n'. Retorna o resultado e define 'err' caso haja algum erro
+double calc_mean(const double vals[], size_t n);  // Calcula a média dos valores no array 'vals' com 'n' elementos
+double calc_median(const double vals[], size_t n);  // Calcula a mediana dos valores no array 'vals' com 'n' elementos
+double calc_stddev(const double vals[], size_t n);  // Calcula o desvio padrão dos valores no array 'vals' com 'n' elementos
+double calc_max(const double vals[], size_t n);  // Retorna o maior valor do array 'vals' com 'n' elementos
+double calc_min(const double vals[], size_t n);  // Retorna o menor valor do array 'vals' com 'n' elementos
+long long calc_gcd(long long a, long long b);  // Calcula o Máximo Divisor Comum (MDC) entre 'a' e 'b'
+long long calc_lcm(long long a, long long b);  // Calcula o Mínimo Múltiplo Comum (MMC) entre 'a' e 'b'
+
+
+/* ----------Funções de Matrizes---------- */
+
+typedef struct { double m[2][2]; } Mat2;  // Define uma matriz 2x2 (2 linhas e 2 colunas) de números de ponto flutuante
+typedef struct { double m[3][3]; } Mat3;  // Define uma matriz 3x3 (3 linhas e 3 colunas) de números de ponto flutuante
+
+Mat2 mat2_add(const Mat2 *a, const Mat2 *b);  // Soma duas matrizes 2x2 e retorna o resultado
+Mat2 mat2_mul(const Mat2 *a, const Mat2 *b);  // Multiplica duas matrizes 2x2 e retorna o resultado
+Mat3 mat3_add(const Mat3 *a, const Mat3 *b);  // Soma duas matrizes 3x3 e retorna o resultado
+Mat3 mat3_mul(const Mat3 *a, const Mat3 *b);  // Multiplica duas matrizes 3x3 e retorna o resultado
+
+/* ---------- Funções para o Histórico ---------- */
+
+void init_historico(Historico *h);  // Inicializa o histórico de operações, preparando o espaço para armazenar as operações
+void hist_add(Historico *h, const char *tipo, double a, double b, double resultado);  // Adiciona uma nova operação ao histórico, com os detalhes da operação (tipo, operandos e resultado)
+void hist_print(const Historico *h);  // Exibe no console todas as operações armazenadas no histórico
+int hist_save_csv(const Historico *h, const char *filename);  // Salva o histórico de operações em um arquivo CSV, facilitando a persistência dos dados
+int hist_load_csv(Historico *h, const char *filename);  // Carrega um histórico de operações a partir de um arquivo CSV, restaurando os dados previamente salvos
+
+/* ---------- Implementações de I/O ---------- */
+/* Função para limpar a entrada após leitura (evita problemas com novas entradas) */
+
+static void clear_input_rest(void) {  
+    int c;
+    // Esse loop vai ler os caracteres restantes na entrada até encontrar uma nova linha ou o final do arquivo (EOF).
+    // Isso é útil para limpar a entrada do usuário, caso ele tenha digitado mais do que o esperado.
+    while ((c = getchar()) != '\n' && c != EOF) { }
+}
+
+/* Função para ler uma linha de texto */
+
+int read_line(char *buf, size_t sz) {
+    if (!buf || sz == 0) return -1;  // Se 'buf' for nulo ou o tamanho for zero, retorna -1 indicando erro.
+    
+    if (!fgets(buf, (int)sz, stdin)) return -1;  // Lê uma linha de texto do stdin para 'buf'. Se falhar, retorna -1.
+    
+    size_t len = strlen(buf);  // Calcula o comprimento da string lida em 'buf'.
+    
+    if (len && buf[len-1] == '\n') buf[len-1] = '\0';  // Se a string terminar com '\n', substitui por '\0' para remover a nova linha.
+    
+    return 0;  // Retorna 0, indicando que a leitura foi bem-sucedida.
+}
+
+
+
+/* Função para ler um número inteiro */
+
+int read_int(const char *prompt, int *out) {
+    char line[LINE_LEN];  // Declara um buffer para armazenar a linha lida do usuário.
+    
+    if (prompt) printf("%s", prompt);  // Se um prompt for fornecido, exibe a mensagem para o usuário.
+    
+    if (!fgets(line, sizeof(line), stdin)) return -1;  // Lê a linha de entrada do usuário. Se falhar, retorna -1.
+
+    char *endptr = NULL;  // Ponteiro usado para verificar onde a conversão para inteiro parou.
+    errno = 0;  // Reseta o valor de 'errno' para capturar erros de conversão.
+
+    long val = strtol(line, &endptr, 10);  // Converte a linha lida para um valor inteiro longo (base 10).
+
+    if (endptr == line || errno == ERANGE || val < INT_MIN || val > INT_MAX) return -2;  // Verifica se ocorreu erro na conversão ou se o valor está fora do intervalo de um inteiro.
+
+    *out = (int)val;  // Converte o valor de 'long' para 'int' e armazena no endereço de 'out'.
+
+    return 0;  // Retorna 0, indicando que a leitura e conversão foram bem-sucedidas.
+}
+
+
+/* Função para ler um número decimal */
+
+int read_double(const char *prompt, double *out) {
+    char line[LINE_LEN];  // Declara um buffer para armazenar a linha lida do usuário.
+    
+    if (prompt) printf("%s", prompt);  // Se um prompt for fornecido, exibe a mensagem para o usuário.
+    
+    if (!fgets(line, sizeof(line), stdin)) return -1;  // Lê a linha de entrada do usuário. Se falhar, retorna -1.
+
+    char *endptr = NULL;  // Ponteiro para verificar onde a conversão para double parou.
+    errno = 0;  // Reseta o valor de 'errno' para capturar erros de conversão.
+
+    double val = strtod(line, &endptr);  // Converte a linha lida para um valor de ponto flutuante (double).
+
+    if (endptr == line || errno == ERANGE) return -2;  // Verifica se houve erro na conversão (não foi possível converter a entrada ou valor fora do intervalo).
+
+    *out = val;  // Armazena o valor convertido na variável apontada por 'out'.
+
+    return 0;  // Retorna 0, indicando que a leitura e conversão foram bem-sucedidas.
+}
+
+
+/* ---------- Funções de Cálculos ---------- */
+/* Funções básicas de cálculo */
+
+double calc_add(double a, double b) { return a + b; }  // Soma dois números e retorna o resultado
+double calc_sub(double a, double b) { return a - b; }  // Subtrai 'b' de 'a' e retorna o resultado
+double calc_mul(double a, double b) { return a * b; }  // Multiplica 'a' por 'b' e retorna o resultado
+
+/* Divisão com verificação de erro (como divisão por zero) */
+int calc_div(double a, double b, double *res) {
+    if (b == 0.0) return -1;  // Se o divisor for zero, retorna erro (-1)
+    *res = a / b;  // Caso contrário, realiza a divisão e armazena o resultado em 'res'
+    return 0;  // Retorna 0 indicando sucesso
+}
+
+/* Potênciação */
+double calc_pow_d(double base, double exp) { return pow(base, exp); }  // Retorna 'base' elevado a 'exp' usando a função pow
+
+/* Raiz enésima - Verifica se o valor é negativo e se a operação é válida */
+int calc_root(double value, double n, double *res) {
+    if (fabs(n) < EPSILON) return -1;  // Se 'n' for zero, retorna erro (-1), pois raiz de zero não é válida
+    double n_round = round(n);  // Arredonda 'n' para verificar se é um número inteiro
+    int n_is_int = (fabs(n - n_round) < 1e-9) ? 1 : 0;  // Verifica se 'n' é inteiro
+    if (value < 0.0) {
+        if (!n_is_int) return -2;  // Se a raiz for fracionária e o número for negativo, retorna erro (-2)
+        long ni = (long) n_round;
+        if ((ni % 2) == 0) return -2;  // Não podemos tirar raiz par de número negativo
+        *res = -pow(fabs(value), 1.0 / n_round);  // Para raiz ímpar, o resultado será negativo
+        return 0;
+    }
+    *res = pow(value, 1.0 / n);  // Calcula a raiz enésima válida
+    return 0;
+}
+
+/* Logaritmo em base personalizada */
+int calc_log_base(double v, double base, double *res) {
+    if (v <= 0.0 || base <= 0.0 || fabs(base - 1.0) < EPSILON) return -1;  // Verifica se os valores são válidos para o cálculo de logaritmo
+    *res = log(v) / log(base);  // Calcula o logaritmo de 'v' na base 'base' usando a fórmula log(v) / log(base)
+    return 0;
+}
+
+/* Função para calcular o fatorial de um número inteiro */
+unsigned long long calc_factorial_int(int n, int *err) {
+    if (n < 0) { if (err) *err = -1; return 0; }  // Se 'n' for negativo, retorna erro (-1)
+    if (n > FACT_LIMIT) { if (err) *err = -2; return 0; }  // Se 'n' for maior que o limite, retorna erro (-2)
+    unsigned long long f = 1ULL;  // Inicializa o fatorial como 1
+    for (int i = 2; i <= n; ++i) f *= (unsigned long long)i;  // Calcula o fatorial multiplicando os números
+    if (err) *err = 0;  // Se não houve erro, define 'err' como 0
+    return f;  // Retorna o fatorial calculado
+}
+
+/* Função para calcular a média de um vetor de números */
+double calc_mean(const double vals[], size_t n) {
+    if (n == 0) return NAN;  // Se o vetor estiver vazio, retorna 'NaN'
+    double s = 0.0;  // Inicializa a soma como 0
+    for (size_t i = 0; i < n; ++i) s += vals[i];  // Soma todos os valores do vetor
+    return s / (double)n;  // Retorna a média dividindo a soma pelo número de elementos
+}
+
+/* Função para calcular a mediana */
+double calc_median(const double vals[], size_t n) {
+    if (n == 0) return NAN;  // Se o vetor estiver vazio, retorna 'NaN'
+    double *copy = malloc(sizeof(double) * n);  // Cria uma cópia do vetor para ordenar
+    if (!copy) return NAN;  // Se não conseguir alocar memória, retorna 'NaN'
+    for (size_t i = 0; i < n; ++i) copy[i] = vals[i];  // Copia os valores do vetor original
+    qsort(copy, n, sizeof(double), cmp_double);  // Ordena os valores da cópia
+    double med;
+    if (n % 2 == 1) med = copy[n/2];  // Se o número de elementos for ímpar, pega o valor do meio
+    else med = (copy[n/2 - 1] + copy[n/2]) / 2.0;  // Se for par, calcula a média dos dois valores centrais
+    free(copy);  // Libera a memória alocada para a cópia
+    return med;  // Retorna a mediana calculada
+}
+
+/* Função para calcular o desvio padrão */
+double calc_stddev(const double vals[], size_t n) {
+    if (n == 0) return NAN;  // Se o vetor estiver vazio, retorna 'NaN'
+    double mean = calc_mean(vals, n);  // Calcula a média dos valores
+    double s = 0.0;  // Inicializa a soma dos quadrados das diferenças
+    for (size_t i = 0; i < n; ++i) {
+        double d = vals[i] - mean;  // Calcula a diferença entre o valor e a média
+        s += d * d;  // Soma o quadrado da diferença
+    }
+    return sqrt(s / (double)n);  // Retorna a raiz quadrada da média das diferenças (desvio padrão)
+}
+
+/* Funções para encontrar o valor máximo e mínimo em um vetor */
+double calc_max(const double vals[], size_t n) {
+    if (n == 0) return NAN;  // Se o vetor estiver vazio, retorna 'NaN'
+    double m = vals[0];  // Inicializa o valor máximo com o primeiro elemento
+    for (size_t i = 1; i < n; ++i) if (vals[i] > m) m = vals[i];  // Compara todos os valores para encontrar o maior
+    return m;  // Retorna o valor máximo encontrado
+}
+
+double calc_min(const double vals[], size_t n) {
+    if (n == 0) return NAN;  // Se o vetor estiver vazio, retorna 'NaN'
+    double m = vals[0];  // Inicializa o valor mínimo com o primeiro elemento
+    for (size_t i = 1; i < n; ++i) if (vals[i] < m) m = vals[i];  // Compara todos os valores para encontrar o menor
+    return m;  // Retorna o valor mínimo encontrado
+}
+
+/* Funções para calcular o Máximo Divisor Comum (MDC) e o Mínimo Múltiplo Comum (MMC) */
+
+/* Função para calcular o MDC de dois números (Máximo Divisor Comum) */
+long long calc_gcd(long long a, long long b) {
+    if (a < 0) a = -a;  // Converte 'a' para positivo, se necessário
+    if (b < 0) b = -b;  // Converte 'b' para positivo, se necessário
+    while (b != 0) {  // Enquanto 'b' não for zero
+        long long t = a % b;  // Armazena o resto da divisão de 'a' por 'b'
+        a = b;  // Atribui 'b' a 'a'
+        b = t;  // Atribui o resto a 'b'
+    }
+    return a;  // Retorna o MDC, que é o valor de 'a' após o fim do loop
+}
+
+/* Função para calcular o MMC de dois números (Mínimo Múltiplo Comum) */
+long long calc_lcm(long long a, long long b) {
+    if (a == 0 || b == 0) return 0;  // Se algum dos valores for zero, o MMC é zero
+    long long g = calc_gcd(a, b);  // Calcula o MDC de 'a' e 'b'
+    long long div = a / g;  // Divide 'a' pelo MDC para evitar overflow
+    long long res = div * b;  // Calcula o MMC multiplicando o valor obtido com 'b'
+    return (res < 0) ? -res : res;  // Retorna o valor absoluto do MMC
+}
+
+/* Funções para operações de matrizes */
+
+/* Função para somar duas matrizes 2x2 */
+Mat2 mat2_add(const Mat2 *a, const Mat2 *b) {
+    Mat2 r;
+    for (int i = 0; i < 2; ++i)  // Percorre as linhas da matriz
+        for (int j = 0; j < 2; ++j)  // Percorre as colunas da matriz
+            r.m[i][j] = a->m[i][j] + b->m[i][j];  // Soma os elementos correspondentes das duas matrizes
+    return r;  // Retorna a matriz resultante da soma
+}
+
+/* Função para multiplicar duas matrizes 2x2 */
+Mat2 mat2_mul(const Mat2 *a, const Mat2 *b) {
+    Mat2 r;
+    for (int i = 0; i < 2; ++i)  // Percorre as linhas da matriz 'a'
+        for (int j = 0; j < 2; ++j) {  // Percorre as colunas da matriz 'b'
+            r.m[i][j] = 0.0;  // Inicializa o valor na posição da matriz resultante
+            for (int k = 0; k < 2; ++k)  // Faz o cálculo da multiplicação
+                r.m[i][j] += a->m[i][k] * b->m[k][j];  // Multiplica e acumula os resultados
+        }
+    return r;  // Retorna a matriz resultante da multiplicação
+}
+
+/* Função para somar duas matrizes 3x3 */
+Mat3 mat3_add(const Mat3 *a, const Mat3 *b) {
+    Mat3 r;
+    for (int i = 0; i < 3; ++i)  // Percorre as linhas da matriz
+        for (int j = 0; j < 3; ++j)  // Percorre as colunas da matriz
+            r.m[i][j] = a->m[i][j] + b->m[i][j];  // Soma os elementos correspondentes das duas matrizes
+    return r;  // Retorna a matriz resultante da soma
+}
+
+/* Função para multiplicar duas matrizes 3x3 */
+Mat3 mat3_mul(const Mat3 *a, const Mat3 *b) {
+    Mat3 r;
+    for (int i = 0; i < 3; ++i)  // Percorre as linhas da matriz 'a'
+        for (int j = 0; j < 3; ++j) {  // Percorre as colunas da matriz 'b'
+            r.m[i][j] = 0.0;  // Inicializa o valor na posição da matriz resultante
+            for (int k = 0; k < 3; ++k)  // Faz o cálculo da multiplicação
+                r.m[i][j] += a->m[i][k] * b->m[k][j];  // Multiplica e acumula os resultados
+        }
+    return r;  // Retorna a matriz resultante da multiplicação
+}
+
+/* ---------- Funções para o Histórico ---------- */
+/* Inicializa o histórico com valores padrões */
+
+void init_historico(Historico *h) {
+    if (!h) return;  // Se o ponteiro 'h' for nulo, não faz nada e retorna, evitando o acesso a memória inválida.
+    
+    h->start = 0;  // Inicializa o índice de início do histórico, que indica onde as operações começam a ser armazenadas.
+    h->count = 0;  // Inicializa o contador de operações realizadas, no início não há nenhuma operação.
+    h->next_id = 1;  // Inicializa o ID da próxima operação a ser registrada como 1.
+
+    // Preenche todos os slots do histórico com valores padrão.
+    for (int i = 0; i < HIST_SIZE; ++i) {
+        h->ops[i].tipo[0] = '\0';  // Inicializa o tipo da operação como uma string vazia.
+        h->ops[i].a = h->ops[i].b = h->ops[i].resultado = 0.0;  // Inicializa os valores dos operandos e o resultado como 0.
+        h->ops[i].id = 0;  // Inicializa o ID da operação como 0.
+    }
+}
+
+/* Adiciona uma operação ao histórico */
+void hist_add(Historico *h, const char *tipo, double a, double b, double resultado) {
+    if (!h || !tipo) return;  // Verifica se 'h' ou 'tipo' são nulos. Se forem, não faz nada e retorna.
+
+    int idx = (h->start + h->count) % HIST_SIZE;  // Calcula o índice onde a nova operação será armazenada no histórico, usando o conceito de buffer circular.
+
+    // Se o histórico já estiver cheio, sobrescreve a operação mais antiga (começa a substituir a partir de 'start').
+    if (h->count == HIST_SIZE) {
+        idx = h->start;  // Se o histórico estiver cheio, sobrescreve a operação no índice de 'start'.
+        h->start = (h->start + 1) % HIST_SIZE;  // Avança o índice de 'start' para o próximo slot, de forma circular.
+    } else {
+        h->count++;  // Se o histórico não estiver cheio, apenas incrementa o contador de operações.
+    }
+
+    Operacao *op = &h->ops[idx];  // Pega o espaço adequado no histórico para armazenar a nova operação.
+
+    // Copia o tipo da operação para o histórico, garantindo que o tipo não ultrapasse o limite definido por MAX_TIPO.
+    strncpy(op->tipo, tipo, MAX_TIPO - 1);
+    op->tipo[MAX_TIPO - 1] = '\0';  // Garante que a string esteja corretamente terminada com '\0'.
+
+    // Armazena os operandos 'a' e 'b' e o resultado da operação no histórico.
+    op->a = a;
+    op->b = b;
+    op->resultado = resultado;
+
+    // Atribui um ID único para essa operação e incrementa o próximo ID.
+    op->id = h->next_id++;  // Atribui um ID e incrementa o próximo ID a ser usado.
+}
+
+
+/* Exibe o histórico das operações */
+
+void hist_print(const Historico *h) {
+    if (!h) return;  // Se o ponteiro 'h' for nulo, não faz nada e retorna (protege contra falhas de acesso à memória).
+
+    printf("\n--- Histórico (%d registros) ---\n", h->count);  // Exibe a quantidade de operações no histórico.
+
+    if (h->count == 0) {  // Se não houver nenhuma operação registrada no histórico, imprime "Vazio".
+        printf("Vazio.\n");
+        return;  // Retorna porque não há nada para mostrar.
+    }
+
+    for (int i = 0; i < h->count; ++i) {  // Percorre todas as operações no histórico.
+        int idx = (h->start + i) % HIST_SIZE;  // Calcula o índice de onde a operação está armazenada, usando o conceito de buffer circular.
+        const Operacao *op = &h->ops[idx];  // Pega a operação armazenada nesse índice.
+
+        // Exibe as informações da operação, como o ID, tipo da operação, operandos e resultado.
+        printf("ID %d | %s | a=%.10g b=%.10g => resultado=%.10g\n", 
+               op->id, op->tipo, op->a, op->b, op->resultado);
+    }
+
+    printf("------------------------------\n");  // Exibe uma linha para finalizar a impressão do histórico.
+}
+
+
+/* Salva o histórico em um arquivo CSV */
+
+int hist_save_csv(const Historico *h, const char *filename) {
+    if (!h || !filename) return -1;  // Se o ponteiro 'h' ou o 'filename' for nulo, retorna -1 indicando erro.
+
+    FILE *f = fopen(filename, "w");  // Abre o arquivo com o nome 'filename' para escrita ('w').
+    if (!f) return -1;  // Se não conseguir abrir o arquivo, retorna -1 indicando erro.
+
+    fprintf(f, "id,tipo,a,b,resultado\n");  // Escreve o cabeçalho do arquivo CSV com os nomes das colunas.
+
+    for (int i = 0; i < h->count; ++i) {  // Percorre todas as operações no histórico.
+        int idx = (h->start + i) % HIST_SIZE;  // Calcula o índice da operação no histórico, considerando o buffer circular.
+        const Operacao *op = &h->ops[idx];  // Acessa a operação no índice calculado.
+
+        // Escreve os dados da operação no formato CSV no arquivo: id, tipo, operandos e resultado.
+        fprintf(f, "%d,%s,%.15g,%.15g,%.15g\n", op->id, op->tipo, op->a, op->b, op->resultado);
+    }
+
+    fclose(f);  // Fecha o arquivo após terminar a escrita.
+    return 0;  // Retorna 0, indicando que a operação foi bem-sucedida.
+}
